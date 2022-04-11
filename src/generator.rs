@@ -30,7 +30,7 @@ pub struct Oscillator {
     arp_mod: f64,
 }
 pub trait Filter {
-    fn filter(&mut self, sample: f32) -> f32;
+    fn filter(&mut self, sample: f32) -> Option<f32>;
 }
 pub struct FilterIterator<'a> {
     iter: &'a mut dyn Iterator<Item = f32>,
@@ -48,7 +48,7 @@ impl<'a> Iterator for FilterIterator<'a> {
     type Item = f32;
     fn next(&mut self) -> Option<f32> {
         match self.iter.next() {
-            Some(v) => Some(self.filter.filter(v)),
+            Some(v) => self.filter.filter(v),
             None => None,
         }
     }
@@ -241,20 +241,20 @@ impl Envelope {
             EnvelopeStage::End => 0,
         }
     }
-    fn volume(&self) -> f32 {
+    fn volume(&self) -> Option<f32> {
         let dt = self.stage_left as f32 / self.current_stage_length() as f32;
         match self.stage {
-            EnvelopeStage::Attack => 1.0 - dt,
-            EnvelopeStage::Sustain => 1.0 + dt * 2.0 * self.punch,
-            EnvelopeStage::Decay => dt,
-            EnvelopeStage::End => 0.0,
+            EnvelopeStage::Attack => Some(1.0 - dt),
+            EnvelopeStage::Sustain => Some(1.0 + dt * 2.0 * self.punch),
+            EnvelopeStage::Decay => Some(dt),
+            EnvelopeStage::End => None,
         }
     }
 }
 
 impl Filter for Envelope {
-    fn filter(&mut self, sample: f32) -> f32 {
-        sample * self.volume()
+    fn filter(&mut self, sample: f32) -> Option<f32> {
+        self.volume().map(|v| v * sample)
     }
 }
 impl HighLowPassFilter {
@@ -294,7 +294,7 @@ impl HighLowPassFilter {
     }
 }
 impl Filter for HighLowPassFilter {
-    fn filter(&mut self, sample: f32) -> f32 {
+    fn filter(&mut self, sample: f32) -> Option<f32> {
         let pp = self.fltp;
 
         if self.fltw > 0.0 {
@@ -313,7 +313,7 @@ impl Filter for HighLowPassFilter {
         self.fltphp += self.fltp - pp;
         self.fltphp -= self.fltphp * self.flthp;
 
-        self.fltphp
+        Some(self.fltphp)
     }
 }
 impl Phaser {
@@ -344,12 +344,12 @@ impl Phaser {
     }
 }
 impl Filter for Phaser {
-    fn filter(&mut self, sample: f32) -> f32 {
+    fn filter(&mut self, sample: f32) -> Option<f32> {
         let p_len = self.buffer.len();
         self.buffer[self.ipp % p_len] = sample;
         let iphase = (self.fphase.abs() as i32).min(p_len as i32 - 1);
         let result = sample + self.buffer[(self.ipp + p_len - iphase as usize) % p_len];
         self.ipp = (self.ipp + 1) % p_len;
-        result
+        Some(result)
     }
 }
