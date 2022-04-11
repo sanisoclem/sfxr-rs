@@ -54,6 +54,7 @@ pub use generator::WaveType;
 use generator::{Envelope, Filterable, HighLowPassFilter, Oscillator, Phaser};
 
 /// Defines a sound effect configuration for a Generator
+#[derive(Clone)]
 pub struct Sample {
     /// Oscillator wave type
     pub wave_type: WaveType,
