@@ -570,6 +570,7 @@ impl Generator {
             *buffer_value = (sample * self.volume).min(1.0).max(-1.0);
         });
     }
+
     /// Resets the generator to the beginning of the sound effect.
     pub fn reset(&mut self) {
         self.restart();
@@ -614,6 +615,53 @@ impl Generator {
             self.sample.arp_speed,
             self.sample.arp_mod,
         );
+    }
+}
+impl IntoIterator for Generator {
+    type Item = f32;
+    type IntoIter = GeneratorIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        GeneratorIterator {
+            generator: self
+        }
+    }
+}
+
+pub struct GeneratorIterator {
+    generator: Generator,
+}
+impl Iterator for GeneratorIterator {
+    type Item = f32;
+    fn next(&mut self) -> Option<f32> {
+        self.generator.rep_time += 1;
+
+        if self.generator.rep_limit != 0 && self.generator.rep_time >= self.generator.rep_limit {
+            self.generator.rep_time = 0;
+            self.generator.restart();
+        }
+
+        self.generator.oscillator.advance();
+        self.generator.envelope.advance();
+        self.generator.phaser.advance();
+
+        let samples = self
+            .generator
+            .oscillator
+            .by_ref()
+            .chain_filter(&mut self.generator.envelope)
+            .chain_filter(&mut self.generator.hlpf)
+            .chain_filter(&mut self.generator.phaser)
+            .take(8)
+            .collect::<Vec<_>>();
+        let len = samples.len() as f32;
+        if len > 0. {
+            let sample = samples.into_iter().sum::<f32>() / len;
+
+            Some((sample * self.generator.volume).min(1.0).max(-1.0))
+        } else {
+            None
+        }
     }
 }
 
